@@ -1,5 +1,12 @@
 import discord
-from discord import Message, TextChannel
+import re
+import os
+from discord import Message
+from dotenv import load_dotenv
+from langchain.chat_models import ChatOpenAI
+
+load_dotenv()
+
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -17,9 +24,16 @@ async def on_message(message: Message):
     if message.channel.name == "chat-gpt":
         if message.author == client.user:
             return
-        await message.channel.send("Hello!")
-        if message.content.startswith("$hello"):
-            await message.channel.send("Hello!")
+
+        content = re.sub("<@.*>", "", message.content)
+        llm = ChatOpenAI(
+            model_name=os.environ["OPENAI_API_MODEL"],
+            temperature=os.environ["OPENAI_API_TEMPERATURE"],
+        )
+        response = llm.predict(content)
+
+        await message.channel.send(f"{message.author.mention}\n{response}")
 
 
-client.run("")
+if __name__ == "__main__":
+    client.run(os.environ["DISCORD_TOKEN"])
