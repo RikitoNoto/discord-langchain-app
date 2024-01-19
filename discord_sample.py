@@ -1,9 +1,13 @@
 import discord
 import re
 import os
-from discord import Message
+from datetime import timedelta
+from discord.abc import Messageable
+from discord import TextChannel, Message, Thread
 from dotenv import load_dotenv
 from langchain.chat_models import ChatOpenAI
+from langchain.memory import MomentoChatMessageHistory
+from langchain.schema import HumanMessage, LLMResult, SystemMessage
 
 load_dotenv()
 
@@ -21,9 +25,16 @@ async def on_ready():
 
 @client.event
 async def on_message(message: Message):
-    if message.channel.name == "chat-gpt":
+    if message.channel.name == "chat-gpt" or message.channel.parent.name == "chat-gpt":
         if message.author == client.user:
             return
+        
+        channel: Messageable
+        if message.channel.name == "chat-gpt":
+            thread: Thread = await message.create_thread(name=message.content)
+            channel = thread
+        else:
+            channel = message.channel
 
         content = re.sub("<@.*>", "", message.content)
         llm = ChatOpenAI(
@@ -32,7 +43,7 @@ async def on_message(message: Message):
         )
         response = llm.predict(content)
 
-        await message.channel.send(f"{message.author.mention}\n{response}")
+        await channel.send(f"{message.author.mention}\n{response}")
 
 
 if __name__ == "__main__":
