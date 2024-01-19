@@ -5,9 +5,10 @@ from datetime import timedelta
 from discord.abc import Messageable
 from discord import TextChannel, Message, Thread
 from dotenv import load_dotenv
+from langchain.chains import ConversationChain
 from langchain.chat_models import ChatOpenAI
-from langchain.memory import MomentoChatMessageHistory
-from langchain.schema import HumanMessage, LLMResult, SystemMessage
+from langchain.memory import ConversationBufferMemory
+from langchain.schema import AIMessage, HumanMessage, LLMResult, SystemMessage
 
 load_dotenv()
 
@@ -29,21 +30,35 @@ async def on_message(message: Message):
         if message.author == client.user:
             return
         
-        channel: Messageable
+        
+        thread: Messageable
+        # if it isn't in a thread, create a thread from the message content.
         if message.channel.name == "chat-gpt":
-            thread: Thread = await message.create_thread(name=message.content)
-            channel = thread
+            title = message.content
+            thread: Thread = await message.create_thread(name=title[:100])
         else:
-            channel = message.channel
-
+            thread = message.channel
+            
+        messages = [SystemMessage(content="You are a good assistant.")]
+        async for thread_message in thread.history(limit=100):
+            content = re.sub("<@.*>", "", thread_message.content) or re.sub("<@.*>", "", thread_message.system_content)
+            
+            if thread_message.author == client.user:
+                messages.insert(1, AIMessage(content=content))
+            else:
+                messages.insert(1, HumanMessage(content=content))
+            
         content = re.sub("<@.*>", "", message.content)
-        llm = ChatOpenAI(
+        messages.append(HumanMessage(content=content))
+        
+        chat = ChatOpenAI(
             model_name=os.environ["OPENAI_API_MODEL"],
             temperature=os.environ["OPENAI_API_TEMPERATURE"],
         )
-        response = llm.predict(content)
+        
+        response = chat(messages)
 
-        await channel.send(f"{message.author.mention}\n{response}")
+        await thread.send(f"{message.author.mention}\n{response.content}")
 
 
 if __name__ == "__main__":
