@@ -11,6 +11,17 @@
       "program": "discord_sample.py",
       "console": "integratedTerminal",
       "justMyCode": false,
+    },
+    {
+      "name": "import pdf",
+      "type": "python",
+      "request": "launch",
+      "program": "add_document.py",
+      "console": "integratedTerminal",
+      "args": [
+        "/Users/RikitoNoto/Downloads/ai-guideline.pdf"
+      ],
+      "justMyCode": false,
     }
   ]
 }
