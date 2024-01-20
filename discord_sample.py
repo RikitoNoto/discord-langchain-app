@@ -5,10 +5,11 @@ from datetime import timedelta
 from discord.abc import Messageable
 from discord import TextChannel, Message, Thread
 from dotenv import load_dotenv
-from langchain.chains import ConversationChain
+from langchain.chains import ConversationChain, ConversationalRetrievalChain, RetrievalQA
 from langchain.chat_models import ChatOpenAI
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ChatMessageHistory, ConversationBufferMemory
 from langchain.schema import AIMessage, HumanMessage, LLMResult, SystemMessage
+from vectorstore import initialize_vectorstore
 
 load_dotenv()
 
@@ -39,26 +40,38 @@ async def on_message(message: Message):
         else:
             thread = message.channel
             
-        messages = [SystemMessage(content="You are a good assistant.")]
+        history = ChatMessageHistory()
         async for thread_message in thread.history(limit=100):
             content = re.sub("<@.*>", "", thread_message.content) or re.sub("<@.*>", "", thread_message.system_content)
             
             if thread_message.author == client.user:
-                messages.insert(1, AIMessage(content=content))
+                history.add_ai_message(content)
             else:
-                messages.insert(1, HumanMessage(content=content))
+                history.add_user_message(content)
             
         content = re.sub("<@.*>", "", message.content)
-        messages.append(HumanMessage(content=content))
+        history.add_user_message(content)
         
-        chat = ChatOpenAI(
+        vector_store = initialize_vectorstore()
+        
+        llm = ChatOpenAI(
             model_name=os.environ["OPENAI_API_MODEL"],
             temperature=os.environ["OPENAI_API_TEMPERATURE"],
         )
-        
-        response = chat(messages)
+        condense_question_llm = ChatOpenAI(
+            model_name=os.environ["OPENAI_API_MODEL"],
+            temperature=os.environ["OPENAI_API_TEMPERATURE"],
+        )
 
-        await thread.send(f"{message.author.mention}\n{response.content}")
+        qa_chain = ConversationalRetrievalChain.from_llm(
+            llm=llm,
+            retriever=vector_store.as_retriever(),
+            memory=ConversationBufferMemory(chat_memory=history, memory_key="chat_history", return_messages=True),
+            condense_question_llm=condense_question_llm,
+        )
+        response = qa_chain.run(message.content)
+
+        await thread.send(f"{message.author.mention}\n{response}")
 
 
 if __name__ == "__main__":
